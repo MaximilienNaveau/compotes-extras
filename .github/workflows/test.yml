@@ -1,0 +1,26 @@
+name: Tests
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        package: [rest_api, rest_client]
+    defaults:
+      run:
+        working-directory: packages/${{ matrix.package }}
+    steps:
+    - uses: actions/checkout@v7
+    - run: pipx install poetry
+    - uses: actions/setup-python@v6
+      with:
+        python-version: '3.10'
+        cache: poetry
+        cache-dependency-path: packages/${{ matrix.package }}/poetry.lock
+    - run: poetry install --with dev --no-interaction --no-ansi
+    - if: matrix.package == 'rest_api'
+      run: poetry run python manage.py test
+      env:
+        PYTHONWARNINGS: error
+    - if: matrix.package == 'rest_client'
+      run: poetry run pytest

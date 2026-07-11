@@ -1,0 +1,28 @@
+[build-system]
+build-backend = "poetry.core.masonry.api"
+requires = ["poetry-core>=1.0.0"]
+
+[tool.poetry]
+authors = ["Maximilien Naveau <maximilien.naveau@gmail.com>"]
+description = "Django REST Framework API app for compotes"
+license = "BSD-2-Clause"
+name = "compotes-rest-api"
+packages = [{include = "compotes_rest_api"}]
+version = "0.1.0"
+
+[tool.poetry.dependencies]
+compotes = {git = "https://github.com/MaximilienNaveau/compotes.git", rev = "8da4d40087aa66653f71a50c360930ca213b8b0f"}
+django = ">=4.2,<5.0"
+django-filter = ">=24.3,<26.0"
+djangorestframework = ">=3.15,<4.0"
+python = "^3.10"
+
+[tool.poetry.group.dev]
+optional = true
+
+[tool.poetry.group.dev.dependencies]
+coverage = "^7.13.5"
+ruff = "^0.15.9"
+
+[tool.tomlsort]
+all = true

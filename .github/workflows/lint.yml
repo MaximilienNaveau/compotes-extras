@@ -1,0 +1,10 @@
+name: Lints
+on: [push, pull_request]
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v7
+    - run: pipx install ruff==0.15.20
+    - run: ruff format --check .
+    - run: ruff check .
