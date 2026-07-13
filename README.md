@@ -10,24 +10,43 @@ upstream maintainer wants to carry.
   REST Framework app (extracted from what was originally an in-tree `api`
   app on [MaximilienNaveau/compotes](https://github.com/MaximilienNaveau/compotes)).
   Depends on `compotes` (and its `actions` app) as an external package. See
-  its own README / [compotes' docs/03-rest-api.md](https://github.com/MaximilienNaveau/compotes/blob/main/docs/03-rest-api.md)
-  for the endpoint reference.
+  its own README / [compotes' docs/03-rest-api.md on the `extras-base` branch](https://github.com/MaximilienNaveau/compotes/blob/extras-base/docs/03-rest-api.md)
+  for the endpoint reference — `compotes`' `main` is a pristine mirror of
+  upstream and doesn't carry this doc (see "Branches" below).
 - [`packages/rest_client`](packages/rest_client) — `compotes-rest-client`, a
   thin Python client wrapping that API with `requests`. No dependency on
   Django or the API package itself.
 
 A GUI package may be added later as a sibling under `packages/`.
 
+## `compotes`' branches
+
+[MaximilienNaveau/compotes](https://github.com/MaximilienNaveau/compotes) has
+two relevant branches:
+
+- `main` — a pristine mirror of `nim65s/main` (upstream), zero diff. Nothing
+  fork-specific lives here.
+- `events-upstream` — `nim65s/main` + one commit adding the events feature,
+  nothing else. This is the PR branch proposed upstream, kept minimal and
+  Nix/REST-free on purpose (see [compotes' `docs/README.md`](https://github.com/MaximilienNaveau/compotes/blob/extras-base/docs/README.md)
+  for why: the maintainer doesn't want AI-heavy or overly complex PRs).
+- `extras-base` — `events-upstream` + the REST API wiring (`compotes-rest-api`
+  in `INSTALLED_APPS`/`urls.py`/`pyproject.toml`) that used to be proposed
+  upstream too, before it moved to this repo. **This is what `flake.nix`
+  below actually fetches** — not `main`, which doesn't have any of it.
+
 ## Nix packaging & local dev instance
 
 The root `flake.nix` is the shared foundation for running the full stack
 (compotes + compotes-rest-api) via Nix — for local dev now, and later as a
 base for a NixOS module or a Docker image. It lives here rather than on
-`compotes` deliberately: `compotes` stays a clean, upstream-mergeable fork
-(just the events feature), with zero Nix files of its own. `flake.nix`
-fetches it via the `compotes-src` input (pinned in `flake.lock`, bump with
-`nix flake update compotes-src`) and combines it with this repo's own
-`compotes-rest-api`, using [poetry2nix](https://github.com/nix-community/poetry2nix).
+`compotes` deliberately: `compotes` stays clean and upstream-mergeable, with
+zero Nix files of its own. `flake.nix` fetches `compotes`' `extras-base`
+branch via the `compotes-src` input (pinned by exact commit in `flake.lock`;
+bump with `nix flake update compotes-src` — it'll keep resolving to
+`extras-base`'s tip, not `main`, since the input pins the branch ref
+explicitly) and combines it with this repo's own `compotes-rest-api`, using
+[poetry2nix](https://github.com/nix-community/poetry2nix).
 
 ```sh
 nix build            # packages.default: the full app as an installable Nix package
