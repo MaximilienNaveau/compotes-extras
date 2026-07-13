@@ -12,6 +12,7 @@
       },
       "original": {
         "owner": "MaximilienNaveau",
+        "ref": "extras-base",
         "repo": "compotes",
         "type": "github"
       }

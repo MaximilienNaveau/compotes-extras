@@ -8,11 +8,15 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
     flake-utils.url = "github:numtide/flake-utils";
-    # compotes itself deliberately carries no Nix files - it stays a clean,
-    # upstream-mergeable fork (just the events feature). This is the only
-    # place that packages/runs the full stack (compotes + compotes-rest-api).
+    # compotes' own `main` is a pristine mirror of nim65s/main (the events
+    # feature is proposed upstream from the events-upstream branch instead,
+    # carrying no REST/Nix additions of its own). `extras-base` is the
+    # branch that actually has compotes-rest-api wired in (INSTALLED_APPS,
+    # urls.py, pyproject.toml) - fetch that explicitly, not the default
+    # branch, or a future `nix flake update` would silently point this at
+    # the clean, REST-less main and break the build.
     compotes-src = {
-      url = "github:MaximilienNaveau/compotes";
+      url = "github:MaximilienNaveau/compotes/extras-base";
       flake = false;
     };
   };
