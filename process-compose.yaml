@@ -1,0 +1,25 @@
+version: "0.5"
+
+# Local dev instance for the full stack (compotes, fetched via the
+# compotes-src flake input + compotes-rest-api). Uses settings.py's sqlite
+# backend, redirected to a writable /tmp path since compotes-src is a
+# read-only /nix/store path - compotes itself carries no Nix files.
+# Requires `nix develop` (sets $COMPOTES_SRC).
+
+processes:
+  migrate:
+    command: |
+      set -eu
+      mkdir -p /tmp/compotes-dev
+      cd "$COMPOTES_SRC"
+      DB=/tmp/compotes-dev/db.sqlite3 python manage.py migrate
+    availability:
+      restart: "no"
+
+  runserver:
+    command: |
+      cd "$COMPOTES_SRC"
+      DB=/tmp/compotes-dev/db.sqlite3 python manage.py runserver 0.0.0.0:8000
+    depends_on:
+      migrate:
+        condition: process_completed_successfully
