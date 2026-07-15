@@ -3,11 +3,11 @@
     "compotes-src": {
       "flake": false,
       "locked": {
-        "lastModified": 1783797199,
-        "narHash": "sha256-nkCQ9M5gmO8Srzhs0YvxINUwEfAD+tQl+7wuZ0zbnsE=",
+        "lastModified": 1784135039,
+        "narHash": "sha256-+t9K41xVY4khuv5rHN/j+dGbd0Du2+g23PVOrjsQsQ4=",
         "owner": "MaximilienNaveau",
         "repo": "compotes",
-        "rev": "5c8db982a6d851a4ca31c73ec0eae8a657348c4b",
+        "rev": "d24ee6c5835ff6633272a9c6f25dc2d92c8a363f",
         "type": "github"
       },
       "original": {
