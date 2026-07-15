@@ -2,16 +2,23 @@ version: "0.5"
 
 # Local dev / lightweight deployment instance for the full stack (compotes,
 # fetched via the compotes-src flake input + compotes-rest-api). Uses
-# settings.py's sqlite backend by default, redirected to a writable /tmp
-# path since compotes-src is a read-only /nix/store path - compotes itself
+# settings.py's sqlite backend by default, redirected to a writable path
+# since compotes-src is a read-only /nix/store path - compotes itself
 # carries no Nix files. Requires `nix develop` or `nix run` (both set
 # $COMPOTES_SRC).
 #
 # Parametrized via .env (loaded automatically from the CWD) or the shell
 # environment - see .env.example for the full list. Anything settings.py
 # itself reads from the environment (SECRET_KEY, DEBUG, DB, POSTGRES_*,
-# ALLOWED_HOST, DOMAIN_NAME, ...) passes through untouched; APP_NAME and
-# PORT below are specific to this process-compose setup, not to compotes.
+# ALLOWED_HOST, DOMAIN_NAME, ...) passes through untouched.
+#
+# APP_NAME/PORT/CHATONS_ROOT_DIR below are specific to this process-compose
+# setup, not to compotes. CHATONS_ROOT_DIR matches compotes' own
+# docker-compose.yml, which roots every persistent volume under
+# ${CHATONS_ROOT_DIR:-/srv/chatons}/compotes/... - same variable here, so
+# examples/ can point it at /srv/chatons and match production exactly, but
+# defaulting to /tmp instead of /srv/chatons since a normal user can't
+# write to /srv without root.
 #
 # Every $ below is doubled ($$) on purpose: process-compose does its own
 # docker-compose-style $${VAR}/$$VAR interpolation on command strings
@@ -26,7 +33,7 @@ processes:
   migrate:
     command: |
       set -eu
-      data_dir="/tmp/compotes-$${APP_NAME:-dev}"
+      data_dir="$${CHATONS_ROOT_DIR:-/tmp}/compotes/$${APP_NAME:-dev}"
       mkdir -p "$$data_dir"
       cd "$$COMPOTES_SRC"
       DB="$${DB:-$$data_dir/db.sqlite3}" python manage.py migrate
@@ -35,7 +42,7 @@ processes:
 
   runserver:
     command: |
-      data_dir="/tmp/compotes-$${APP_NAME:-dev}"
+      data_dir="$${CHATONS_ROOT_DIR:-/tmp}/compotes/$${APP_NAME:-dev}"
       cd "$$COMPOTES_SRC"
       DB="$${DB:-$$data_dir/db.sqlite3}" python manage.py runserver "0.0.0.0:$${PORT:-8000}"
     depends_on:

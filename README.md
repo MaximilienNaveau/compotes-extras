@@ -56,9 +56,12 @@ nix run               # apps.default: start the instance directly, see below
 
 `compotes-src` is a read-only `/nix/store` path (it's fetched, not a live
 checkout), so `process-compose.yaml` redirects the sqlite DB to a writable
-`/tmp/compotes-$APP_NAME/db.sqlite3` — this is a run-it-as-deployed loop, not
-a live-edit-`compotes`-and-reload one (for that, just run `compotes`'s own
-`poetry install`/`manage.py runserver` directly in its own checkout).
+`$CHATONS_ROOT_DIR/compotes/$APP_NAME/db.sqlite3` (defaults to
+`/tmp/compotes/dev/db.sqlite3` — same `CHATONS_ROOT_DIR` convention
+`compotes`' own `docker-compose.yml` uses, see `.env.example`) — this is a
+run-it-as-deployed loop, not a live-edit-`compotes`-and-reload one (for
+that, just run `compotes`'s own `poetry install`/`manage.py runserver`
+directly in its own checkout).
 
 `nix run` is the idiomatic entrypoint for "spawn a program" (`nix develop -c`
 is for entering an interactive shell instead — still there for anything
@@ -78,12 +81,14 @@ signup flow — create a user once, the first time, against the same DB path:
 ```sh
 nix develop -c bash -c '
   cd "$COMPOTES_SRC"
-  DB=/tmp/compotes-dev/db.sqlite3 \
+  DB=/tmp/compotes/dev/db.sqlite3 \
   DJANGO_SUPERUSER_USERNAME=dev DJANGO_SUPERUSER_EMAIL=dev@example.org \
   DJANGO_SUPERUSER_PASSWORD=devdevdev \
   python manage.py createsuperuser --noinput
 '
 ```
+(Path matches `dev/.env`'s defaults — adjust if using a different
+`APP_NAME`/`CHATONS_ROOT_DIR`.)
 
 ### Configuring it: `.env`
 
@@ -91,8 +96,11 @@ nix develop -c bash -c '
 from automatically — nothing needs to know it exists beyond that. See
 [`.env.example`](.env.example) for every variable (port, a name to
 namespace the data dir by — so multiple instances don't collide — DB
-backend, `SECRET_KEY`, `ALLOWED_HOST`, ...). Two ready-made places to run
-from:
+backend, `SECRET_KEY`, `ALLOWED_HOST`, `CHATONS_ROOT_DIR`, ...). Note there's
+no nginx here, unlike `compotes`' own `docker-compose.yml` — intentional
+while `DEBUG=True` (`manage.py runserver` serves static/media files itself
+then), but read `.env.example`'s note on `DEBUG` before turning it off, or
+CSS/JS will silently 404. Two ready-made places to run from:
 
 - [`dev/`](dev) — has a `.env` already, for working on this checkout:
   `cd dev && nix run .. -- up -D`.
@@ -120,14 +128,15 @@ nix flake update compotes-src           # re-pin to extras-base's current tip
 nix run . -- up -D      # rebuilds as needed, starts fresh
 ```
 
-The sqlite file lives at a fixed `/tmp` path, outside the Nix store, so it's
-untouched by any of this — only the *code* changes underneath it. `migrate`
-re-runs on every start but is a no-op unless the update actually added new
-migrations. Verified: created an event, went through a full down → update →
-up cycle, the event was still there afterward.
+The sqlite file lives at a fixed path outside the Nix store (see
+`CHATONS_ROOT_DIR` above), so it's untouched by any of this — only the
+*code* changes underneath it. `migrate` re-runs on every start but is a
+no-op unless the update actually added new migrations. Verified: created an
+event, went through a full down → update → up cycle, the event was still
+there afterward.
 
-To start over with a blank DB instead, delete it first (path depends on
-`APP_NAME` — `/tmp/compotes-dev` by default).
+To start over with a blank DB instead, delete it first (`/tmp/compotes/dev`
+by default).
 
 ## Provenance
 
