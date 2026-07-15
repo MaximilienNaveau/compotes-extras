@@ -1,25 +1,43 @@
 version: "0.5"
 
-# Local dev instance for the full stack (compotes, fetched via the
-# compotes-src flake input + compotes-rest-api). Uses settings.py's sqlite
-# backend, redirected to a writable /tmp path since compotes-src is a
-# read-only /nix/store path - compotes itself carries no Nix files.
-# Requires `nix develop` (sets $COMPOTES_SRC).
+# Local dev / lightweight deployment instance for the full stack (compotes,
+# fetched via the compotes-src flake input + compotes-rest-api). Uses
+# settings.py's sqlite backend by default, redirected to a writable /tmp
+# path since compotes-src is a read-only /nix/store path - compotes itself
+# carries no Nix files. Requires `nix develop` or `nix run` (both set
+# $COMPOTES_SRC).
+#
+# Parametrized via .env (loaded automatically from the CWD) or the shell
+# environment - see .env.example for the full list. Anything settings.py
+# itself reads from the environment (SECRET_KEY, DEBUG, DB, POSTGRES_*,
+# ALLOWED_HOST, DOMAIN_NAME, ...) passes through untouched; APP_NAME and
+# PORT below are specific to this process-compose setup, not to compotes.
+#
+# Every $ below is doubled ($$) on purpose: process-compose does its own
+# docker-compose-style $${VAR}/$$VAR interpolation on command strings
+# *before* bash ever sees them, and silently replaces anything it doesn't
+# understand (including bash's own ${VAR:-default} fallback syntax, and
+# even locally-assigned shell variables referenced on a later line) with
+# an empty string instead of leaving it alone. $$ is process-compose's
+# escape sequence for a literal, unprocessed $ - verified empirically that
+# without it, ${APP_NAME:-dev} silently becomes "" instead of "dev".
 
 processes:
   migrate:
     command: |
       set -eu
-      mkdir -p /tmp/compotes-dev
-      cd "$COMPOTES_SRC"
-      DB=/tmp/compotes-dev/db.sqlite3 python manage.py migrate
+      data_dir="/tmp/compotes-$${APP_NAME:-dev}"
+      mkdir -p "$$data_dir"
+      cd "$$COMPOTES_SRC"
+      DB="$${DB:-$$data_dir/db.sqlite3}" python manage.py migrate
     availability:
       restart: "no"
 
   runserver:
     command: |
-      cd "$COMPOTES_SRC"
-      DB=/tmp/compotes-dev/db.sqlite3 python manage.py runserver 0.0.0.0:8000
+      data_dir="/tmp/compotes-$${APP_NAME:-dev}"
+      cd "$$COMPOTES_SRC"
+      DB="$${DB:-$$data_dir/db.sqlite3}" python manage.py runserver "0.0.0.0:$${PORT:-8000}"
     depends_on:
       migrate:
         condition: process_completed_successfully

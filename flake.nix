@@ -84,6 +84,51 @@
           # avoid needing native build inputs for C-extension packages.
           preferWheels = true;
         };
+
+        # Matches compotes CI's `poetry install --with dev` (main + dev, no
+        # prod-only gunicorn/psycopg2 - the dev instance uses sqlite by
+        # default; see process-compose.yaml/.env.example for postgres).
+        devPythonEnv = mkPoetryEnv (
+          commonArgs
+          // {
+            groups = [
+              "main"
+              "dev"
+            ];
+          }
+        );
+
+        # `nix run` is the idiomatic way to "spawn a program" from a flake -
+        # `nix develop -c ...` is for entering an interactive shell, not for
+        # this. Wraps process-compose with $COMPOTES_SRC pre-set and this
+        # repo's process-compose.yaml pre-selected; everything after `--`
+        # passes straight through (bare `process-compose`, no subcommand,
+        # already defaults to `up`):
+        #   nix run                  # foreground, TUI
+        #   nix run . -- up -D       # detached
+        #   nix run . -- down        # stop
+        devServer = pkgs.writeShellApplication {
+          name = "compotes-dev-server";
+          runtimeInputs = [
+            devPythonEnv
+            pkgs.process-compose
+          ];
+          text = ''
+            export COMPOTES_SRC=${compotes-src}
+            # -f/--config is only a valid flag for `up` (or no subcommand,
+            # which defaults to it) - client-only subcommands like `down`
+            # or `attach` just talk to the already-running server via its
+            # port and reject -f outright ("unknown shorthand flag").
+            case "''${1:-}" in
+              up|"")
+                exec process-compose -f ${./process-compose.yaml} "$@"
+                ;;
+              *)
+                exec process-compose "$@"
+                ;;
+            esac
+          '';
+        };
       in
       {
         packages.default = mkPoetryApplication (
@@ -105,20 +150,14 @@
           }
         );
 
+        apps.default = {
+          type = "app";
+          program = "${devServer}/bin/compotes-dev-server";
+        };
+
         devShells.default = pkgs.mkShell {
           packages = [
-            (mkPoetryEnv (
-              commonArgs
-              // {
-                # Matches compotes CI's `poetry install --with dev` (main +
-                # dev, no prod-only gunicorn/psycopg2 - local dev uses
-                # sqlite; see process-compose.yaml).
-                groups = [
-                  "main"
-                  "dev"
-                ];
-              }
-            ))
+            devPythonEnv
             pkgs.poetry
             pkgs.process-compose
           ];

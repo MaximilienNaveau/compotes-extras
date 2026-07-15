@@ -51,24 +51,29 @@ explicitly) and combines it with this repo's own `compotes-rest-api`, using
 ```sh
 nix build            # packages.default: the full app as an installable Nix package
 nix develop           # devShell: python/poetry/process-compose, $COMPOTES_SRC set
+nix run               # apps.default: start the instance directly, see below
 ```
 
 `compotes-src` is a read-only `/nix/store` path (it's fetched, not a live
 checkout), so `process-compose.yaml` redirects the sqlite DB to a writable
-`/tmp/compotes-dev/db.sqlite3` — this is a run-it-as-deployed loop, not a
-live-edit-`compotes`-and-reload one (for that, just run `compotes`'s own
+`/tmp/compotes-$APP_NAME/db.sqlite3` — this is a run-it-as-deployed loop, not
+a live-edit-`compotes`-and-reload one (for that, just run `compotes`'s own
 `poetry install`/`manage.py runserver` directly in its own checkout).
 
-### Start
+`nix run` is the idiomatic entrypoint for "spawn a program" (`nix develop -c`
+is for entering an interactive shell instead — still there for anything
+needing one, e.g. `createsuperuser` below). It wraps `process-compose`, with
+everything after `--` passed straight through:
 
 ```sh
-nix develop -c process-compose up            # foreground, with the TUI
-nix develop -c process-compose up -D         # detached - returns immediately
+nix run                    # foreground, with the TUI (bare process-compose defaults to `up`)
+nix run . -- up -D         # detached - returns immediately
+nix run . -- down          # stop - works from any directory/terminal, talks to the running instance over its port
 ```
 
 Runs `migrate` then `runserver`. Browse to `http://compotes.localhost:8000/`
 (`settings.py`'s `ALLOWED_HOSTS` doesn't accept plain `localhost`). There's no
-initial user — create one once, the first time, against the same DB path:
+signup flow — create a user once, the first time, against the same DB path:
 
 ```sh
 nix develop -c bash -c '
@@ -80,35 +85,49 @@ nix develop -c bash -c '
 '
 ```
 
-### Stop
+### Configuring it: `.env`
 
-```sh
-nix develop -c process-compose down
-```
+`process-compose` loads a `.env` file from whatever directory you run it
+from automatically — nothing needs to know it exists beyond that. See
+[`.env.example`](.env.example) for every variable (port, a name to
+namespace the data dir by — so multiple instances don't collide — DB
+backend, `SECRET_KEY`, `ALLOWED_HOST`, ...). Two ready-made places to run
+from:
 
-Works from any terminal (detached or not) — `process-compose` tracks the
-running project via a local port, not the shell session that started it.
+- [`dev/`](dev) — has a `.env` already, for working on this checkout:
+  `cd dev && nix run .. -- up -D`.
+- [`examples/`](examples) — no local checkout, no local flake even: shows
+  the same recipe pointed at `github:MaximilienNaveau/compotes-extras`
+  directly, for deploying this somewhere else entirely.
+
+(If you're editing `process-compose.yaml` itself: every `$` in its commands
+is doubled (`$$`) on purpose — `process-compose` does its own
+docker-compose-style interpolation on command strings *before* bash sees
+them, silently replacing anything it doesn't recognize — including bash's
+`${VAR:-default}` syntax — with an empty string. `$$` is its escape for a
+literal, unprocessed `$`, letting bash do the actual interpretation instead.
+Verified this the hard way: without it, `${APP_NAME:-dev}` silently became
+`""`, not `"dev"`.)
 
 ### Update (keeping the same data)
 
 To pick up a newer `extras-base` commit — e.g. after a fix like the French
-translations in this session — without losing what's in the dev DB:
+translations in this session — without losing what's in the DB:
 
 ```sh
-nix develop -c process-compose down     # stop the old build's processes
+nix run . -- down       # stop the old build's processes
 nix flake update compotes-src           # re-pin to extras-base's current tip
-nix develop -c process-compose up       # rebuilds as needed, starts fresh
+nix run . -- up -D      # rebuilds as needed, starts fresh
 ```
 
-The sqlite file lives at the fixed path `/tmp/compotes-dev/db.sqlite3`,
-outside the Nix store, so it's untouched by any of this — only the *code*
-changes underneath it. `migrate` re-runs on every start but is a no-op
-unless the update actually added new migrations. Verified: created an event,
-went through a full down → update → up cycle, the event was still there
-afterward.
+The sqlite file lives at a fixed `/tmp` path, outside the Nix store, so it's
+untouched by any of this — only the *code* changes underneath it. `migrate`
+re-runs on every start but is a no-op unless the update actually added new
+migrations. Verified: created an event, went through a full down → update →
+up cycle, the event was still there afterward.
 
-To start over with a blank DB instead, delete it first:
-`rm -rf /tmp/compotes-dev`.
+To start over with a blank DB instead, delete it first (path depends on
+`APP_NAME` — `/tmp/compotes-dev` by default).
 
 ## Provenance
 
