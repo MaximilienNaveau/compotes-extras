@@ -100,8 +100,8 @@
 
         # main (always-on deps) + prod (gunicorn, psycopg2) - what compotes
         # actually needs to run, as opposed to lint/test tools. This is the
-        # prod-appropriate build: examples/traefik/ runs it via gunicorn,
-        # not manage.py runserver (which DEBUG=True's dev loop uses).
+        # prod-appropriate build: apps.prod/devShells.prod run it via
+        # gunicorn, not manage.py runserver (which the dev loop uses).
         prodApp = mkPoetryApplication (
           commonArgs
           // {
@@ -119,45 +119,78 @@
           }
         );
 
-        # `nix run` is the idiomatic way to "spawn a program" from a flake -
-        # `nix develop -c ...` is for entering an interactive shell, not for
-        # this. Wraps process-compose with $COMPOTES_SRC pre-set and this
-        # repo's process-compose.yaml pre-selected; everything after `--`
-        # passes straight through (bare `process-compose`, no subcommand,
-        # already defaults to `up`):
-        #   nix run                  # foreground, TUI
-        #   nix run . -- up -D       # detached
-        #   nix run . -- down        # stop
-        devServer = pkgs.writeShellApplication {
+        # A process-compose wrapper factory: bakes in $COMPOTES_SRC, a
+        # given python env + extra tools, and a given process-compose.yaml,
+        # so `nix run .#<name>` alone starts the instance. -f/--config is
+        # only a valid flag for `up` (or no subcommand, which defaults to
+        # it) - client-only subcommands like `down`/`attach` just talk to
+        # the already-running server via its port and reject -f outright
+        # ("unknown shorthand flag"), hence the case split.
+        mkServer =
+          {
+            name,
+            pythonEnv,
+            extraPackages ? [ ],
+            configFile,
+          }:
+          pkgs.writeShellApplication {
+            inherit name;
+            runtimeInputs = [
+              pythonEnv
+              pkgs.process-compose
+            ] ++ extraPackages;
+            text = ''
+              export COMPOTES_SRC=${compotes-src}
+              # process-compose.prod.yaml's traefik process cd's here before
+              # running traefik, so traefik.yml's relative `filename:
+              # ./dynamic.yml` resolves regardless of the caller's own CWD
+              # (dev/, prod/, or the repo root - all valid places to run
+              # `nix run` from).
+              export FLAKE_SRC=${./.}
+              case "''${1:-}" in
+                up|"")
+                  exec process-compose -f ${configFile} "$@"
+                  ;;
+                *)
+                  exec process-compose "$@"
+                  ;;
+              esac
+            '';
+          };
+
+        # dev/ has a ready-made .env; nix run .#dev (or -- up -D / -- down):
+        # migrate + manage.py runserver, sqlite.
+        devServer = mkServer {
           name = "compotes-dev-server";
-          runtimeInputs = [
-            devPythonEnv
-            pkgs.process-compose
-          ];
-          text = ''
-            export COMPOTES_SRC=${compotes-src}
-            # -f/--config is only a valid flag for `up` (or no subcommand,
-            # which defaults to it) - client-only subcommands like `down`
-            # or `attach` just talk to the already-running server via its
-            # port and reject -f outright ("unknown shorthand flag").
-            case "''${1:-}" in
-              up|"")
-                exec process-compose -f ${./process-compose.yaml} "$@"
-                ;;
-              *)
-                exec process-compose "$@"
-                ;;
-            esac
-          '';
+          pythonEnv = devPythonEnv;
+          configFile = ./process-compose.yaml;
+        };
+
+        # prod/ has a ready-made .env; nix run .#prod (or -- up -D / -- down):
+        # migrate + gunicorn + (a local testing-only) traefik - see
+        # process-compose.prod.yaml and prod/README.md.
+        prodServer = mkServer {
+          name = "compotes-prod-server";
+          pythonEnv = prodApp.dependencyEnv;
+          extraPackages = [ pkgs.traefik ];
+          configFile = ./process-compose.prod.yaml;
+        };
+
+        devApp = {
+          type = "app";
+          program = "${devServer}/bin/compotes-dev-server";
+        };
+        prodRunApp = {
+          type = "app";
+          program = "${prodServer}/bin/compotes-prod-server";
         };
       in
       {
         packages.default = prodApp;
 
-        apps.default = {
-          type = "app";
-          program = "${devServer}/bin/compotes-dev-server";
-        };
+        apps.default = devApp;
+        apps.dev = devApp;
+        apps.prod = prodRunApp;
 
         devShells.default = pkgs.mkShell {
           packages = [
@@ -174,8 +207,9 @@
           '';
         };
 
-        # gunicorn/psycopg2, no dev tools - what examples/traefik/ actually
-        # runs (a real prod-style WSGI server, not manage.py runserver).
+        # gunicorn/psycopg2, no dev tools - for interactive poking (e.g.
+        # `manage.py shell`) in a prod-like env. `nix run .#prod` above is
+        # the actual entrypoint for running the instance itself.
         devShells.prod = pkgs.mkShell {
           packages = [
             prodApp.dependencyEnv

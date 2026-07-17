@@ -38,8 +38,7 @@ two relevant branches:
 ## Nix packaging & local dev instance
 
 The root `flake.nix` is the shared foundation for running the full stack
-(compotes + compotes-rest-api) via Nix — for local dev now, and later as a
-base for a NixOS module or a Docker image. It lives here rather than on
+(compotes + compotes-rest-api) via Nix. It lives here rather than on
 `compotes` deliberately: `compotes` stays clean and upstream-mergeable, with
 zero Nix files of its own. `flake.nix` fetches `compotes`' `extras-base`
 branch via the `compotes-src` input (pinned by exact commit in `flake.lock`;
@@ -48,16 +47,30 @@ bump with `nix flake update compotes-src` — it'll keep resolving to
 explicitly) and combines it with this repo's own `compotes-rest-api`, using
 [poetry2nix](https://github.com/nix-community/poetry2nix).
 
+There are two symmetric recipes, mirroring `compotes`' own dev (plain
+`poetry install`, sqlite) vs. prod (`docker-compose.yml`: gunicorn +
+Postgres + nginx + Traefik) split:
+
+|                | dev (`nix run .#dev`)         | prod (`nix run .#prod`)                |
+|----------------|--------------------------------|------------------------------------------|
+| Config         | [`process-compose.yaml`](process-compose.yaml) | [`process-compose.prod.yaml`](process-compose.prod.yaml) |
+| App server     | `manage.py runserver`         | `gunicorn` (`devShells.prod`'s env, not the dev one — has gunicorn/psycopg2, no dev tools) |
+| Fronted by     | nothing — browse to it directly | Traefik (file provider — see [`prod/README.md`](prod/README.md)) |
+| Static/media   | served automatically (`DEBUG=True`) | **not served** — known gap, see `.env.example` |
+| Ready-made dir | [`dev/`](dev)                 | [`prod/`](prod)                          |
+
 ```sh
-nix build            # packages.default: the full app as an installable Nix package
-nix develop           # devShell: python/poetry/process-compose, $COMPOTES_SRC set
-nix run               # apps.default: start the instance directly, see below
+nix build             # packages.default: the full app (prod build) as an installable Nix package
+nix develop           # devShells.default: dev shell - python/poetry/process-compose, $COMPOTES_SRC set
+nix develop .#prod    # devShells.prod: prod shell - gunicorn/psycopg2/traefik instead, no dev tools
+nix run .#dev         # apps.dev (= apps.default): start the dev instance directly
+nix run .#prod        # apps.prod: start the prod instance directly
 ```
 
 `compotes-src` is a read-only `/nix/store` path (it's fetched, not a live
-checkout), so `process-compose.yaml` redirects the sqlite DB to a writable
-`$CHATONS_ROOT_DIR/compotes/$APP_NAME/db.sqlite3` (defaults to
-`/tmp/compotes/dev/db.sqlite3` — same `CHATONS_ROOT_DIR` convention
+checkout), so both process-compose recipes redirect the sqlite DB to a
+writable `$CHATONS_ROOT_DIR/compotes/$APP_NAME/db.sqlite3` (defaults to
+`/tmp/compotes/dev/db.sqlite3` for dev — same `CHATONS_ROOT_DIR` convention
 `compotes`' own `docker-compose.yml` uses, see `.env.example`) — this is a
 run-it-as-deployed loop, not a live-edit-`compotes`-and-reload one (for
 that, just run `compotes`'s own `poetry install`/`manage.py runserver`
@@ -65,18 +78,22 @@ directly in its own checkout).
 
 `nix run` is the idiomatic entrypoint for "spawn a program" (`nix develop -c`
 is for entering an interactive shell instead — still there for anything
-needing one, e.g. `createsuperuser` below). It wraps `process-compose`, with
-everything after `--` passed straight through:
+needing one, e.g. `createsuperuser` below, or `devShells.prod` for
+interactive poking in a prod-like env). Both apps wrap `process-compose`,
+with everything after `--` passed straight through:
 
 ```sh
-nix run                    # foreground, with the TUI (bare process-compose defaults to `up`)
-nix run . -- up -D         # detached - returns immediately
-nix run . -- down          # stop - works from any directory/terminal, talks to the running instance over its port
+nix run .#dev                    # foreground, with the TUI (bare process-compose defaults to `up`)
+nix run .#dev -- up -D           # detached - returns immediately
+nix run .#dev -- down            # stop - works from any directory/terminal, talks to the running instance over its port
 ```
+(same shape for `.#prod`.)
 
-Runs `migrate` then `runserver`. Browse to `http://compotes.localhost:8000/`
-(`settings.py`'s `ALLOWED_HOSTS` doesn't accept plain `localhost`). There's no
-signup flow — create a user once, the first time, against the same DB path:
+Runs `migrate` then `runserver` (dev) or `gunicorn` (prod). Browse to
+`http://compotes.localhost:8000/` (`settings.py`'s `ALLOWED_HOSTS` doesn't
+accept plain `localhost`) — through Traefik at `:8090` instead for prod, see
+[`prod/README.md`](prod/README.md). There's no signup flow — create a user
+once, the first time, against the same DB path:
 
 ```sh
 nix develop -c bash -c '
@@ -88,7 +105,7 @@ nix develop -c bash -c '
 '
 ```
 (Path matches `dev/.env`'s defaults — adjust if using a different
-`APP_NAME`/`CHATONS_ROOT_DIR`.)
+`APP_NAME`/`CHATONS_ROOT_DIR`, or for `prod/`.)
 
 ### Configuring it: `.env`
 
@@ -96,25 +113,20 @@ nix develop -c bash -c '
 from automatically — nothing needs to know it exists beyond that. See
 [`.env.example`](.env.example) for every variable (port, a name to
 namespace the data dir by — so multiple instances don't collide — DB
-backend, `SECRET_KEY`, `ALLOWED_HOST`, `CHATONS_ROOT_DIR`, ...). Note there's
-no nginx here, unlike `compotes`' own `docker-compose.yml` — intentional
-while `DEBUG=True` (`manage.py runserver` serves static/media files itself
-then), but read `.env.example`'s note on `DEBUG` before turning it off, or
-CSS/JS will silently 404. Two ready-made places to run from:
+backend, `SECRET_KEY`, `ALLOWED_HOST`, `CHATONS_ROOT_DIR`, ...). Two
+ready-made places to run from, one per recipe:
 
 - [`dev/`](dev) — has a `.env` already, for working on this checkout:
-  `cd dev && nix run .. -- up -D`.
-- [`examples/`](examples) — no local checkout, no local flake even: shows
-  the same recipe pointed at `github:MaximilienNaveau/compotes-extras`
-  directly, for deploying this somewhere else entirely.
-- [`examples/traefik/`](examples/traefik) — a real prod-style deployment
-  with no Docker at all: gunicorn (via `devShells.prod`, not
-  `manage.py runserver`) fronted by Traefik, for a prod environment where
-  Nix and Traefik already exist — including how to plug into a Traefik
-  that's *already running elsewhere*, not just a local demo.
+  `cd dev && nix run ..#dev -- up -D`.
+- [`prod/`](prod) — the `.#prod` recipe (gunicorn + Traefik), for a real
+  deployment where Nix and Traefik already exist, including how to plug
+  into a Traefik that's *already running elsewhere*, not just a local demo:
+  `cd prod && nix run ..#prod -- up -D`. Both directories work equally well
+  pointed at `github:MaximilienNaveau/compotes-extras#dev`/`#prod` instead
+  of `..`, for running on a machine that doesn't have this cloned.
 
-(If you're editing `process-compose.yaml` itself: every `$` in its commands
-is doubled (`$$`) on purpose — `process-compose` does its own
+(If you're editing either `process-compose*.yaml` file: every `$` in its
+commands is doubled (`$$`) on purpose — `process-compose` does its own
 docker-compose-style interpolation on command strings *before* bash sees
 them, silently replacing anything it doesn't recognize — including bash's
 `${VAR:-default}` syntax — with an empty string. `$$` is its escape for a
@@ -128,9 +140,9 @@ To pick up a newer `extras-base` commit — e.g. after a fix like the French
 translations in this session — without losing what's in the DB:
 
 ```sh
-nix run . -- down       # stop the old build's processes
-nix flake update compotes-src           # re-pin to extras-base's current tip
-nix run . -- up -D      # rebuilds as needed, starts fresh
+nix run .#dev -- down                # stop the old build's processes (or .#prod)
+nix flake update compotes-src        # re-pin to extras-base's current tip
+nix run .#dev -- up -D               # rebuilds as needed, starts fresh (or .#prod)
 ```
 
 The sqlite file lives at a fixed path outside the Nix store (see

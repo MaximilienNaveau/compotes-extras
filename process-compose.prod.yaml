@@ -3,22 +3,28 @@ version: "0.5"
 # Real prod-style topology (no Docker, no toy dev server): gunicorn, fronted
 # by Traefik via its *file* provider - the Nix-based equivalent of what
 # compotes' own docker-compose.yml does with Docker labels + Traefik's
-# Docker provider. Run from this directory (nix develop's prod shell sets
-# $COMPOTES_SRC and puts gunicorn/process-compose/traefik on PATH; this
-# dir's own process-compose.yaml is found by default, no -f needed):
-#   nix develop ../..#prod          # or: nix develop github:MaximilienNaveau/compotes-extras#prod
-#   process-compose up -D
+# Docker provider.
+#
+#   nix run .#prod           # foreground, TUI - or `nix run .#prod -- up -D` detached
+#   nix run .#prod -- down   # stop
+#
+# (symmetric with the dev recipe, process-compose.yaml / `nix run .#dev` -
+# see the root README's "Nix packaging" section.) apps.prod sets
+# $COMPOTES_SRC (compotes' fetched source) and $FLAKE_SRC (this repo's own
+# source - where traefik.yml/dynamic.yml live) and puts
+# gunicorn/traefik/process-compose on PATH itself, same as apps.dev does
+# for the dev recipe - no `nix develop` needed.
 #
 # If your real deployment already has its own Traefik running elsewhere
 # (the common case - "nix and a traefik environment exists" already,
 # nothing to spin up here): skip the `traefik` process below entirely
-# (`process-compose up migrate gunicorn`) and copy dynamic.yml into that
-# Traefik's own file-provider-watched directory instead - see README.md.
+# (`nix run .#prod -- up migrate gunicorn`) and copy dynamic.yml into that
+# Traefik's own file-provider-watched directory instead - see prod/README.md.
 # The `traefik` process here is only for testing dynamic.yml actually
 # works before you do that.
 #
-# Same $$ escaping as the root process-compose.yaml - see its comments for
-# why (process-compose interpolates $-patterns in command strings itself,
+# Same $$ escaping as process-compose.yaml - see its comments for why
+# (process-compose interpolates $-patterns in command strings itself,
 # before bash ever sees them).
 #
 # KNOWN GAP, not solved here: gunicorn never serves /static or /media
@@ -30,7 +36,7 @@ processes:
   migrate:
     command: |
       set -eu
-      data_dir="$${CHATONS_ROOT_DIR:-/tmp}/compotes/$${APP_NAME:-traefik-example}"
+      data_dir="$${CHATONS_ROOT_DIR:-/tmp}/compotes/$${APP_NAME:-prod}"
       mkdir -p "$$data_dir"
       cd "$$COMPOTES_SRC"
       DB="$${DB:-$$data_dir/db.sqlite3}" python manage.py migrate
@@ -40,7 +46,7 @@ processes:
   gunicorn:
     command: |
       cd "$$COMPOTES_SRC"
-      data_dir="$${CHATONS_ROOT_DIR:-/tmp}/compotes/$${APP_NAME:-traefik-example}"
+      data_dir="$${CHATONS_ROOT_DIR:-/tmp}/compotes/$${APP_NAME:-prod}"
       # Bound to 127.0.0.1, not 0.0.0.0: the whole point of this example is
       # that Traefik is the only public entrypoint, matching how `app` in
       # docker-compose.yml has no host port mapping of its own either.
@@ -51,7 +57,9 @@ processes:
         condition: process_completed_successfully
 
   traefik:
-    command: traefik --configFile=./traefik.yml
+    command: |
+      cd "$$FLAKE_SRC"
+      traefik --configFile=./traefik.yml
     depends_on:
       gunicorn:
         condition: process_started
