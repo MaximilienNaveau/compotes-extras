@@ -1,0 +1,20 @@
+# Traefik dynamic config: same Host() rule shape as compotes' own
+# docker-compose.yml's `traefik.http.routers.compotes-app.rule` label
+# (`Host(compotes.${DOMAIN_NAME:-localhost})`) - and matches settings.py's
+# own ALLOWED_HOSTS default (HOSTNAME = f"{PROJECT}.{DOMAIN_NAME}"), so no
+# extra ALLOWED_HOST configuration is needed on the app side.
+#
+# The backend port (8000) must match process-compose.yaml's APP_PORT (also
+# defaults to 8000) - update both together if you change it.
+
+http:
+  routers:
+    compotes:
+      rule: "Host(`compotes.localhost`)"
+      service: compotes
+
+  services:
+    compotes:
+      loadBalancer:
+        servers:
+          - url: "http://127.0.0.1:8000"

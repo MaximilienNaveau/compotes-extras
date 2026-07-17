@@ -98,6 +98,27 @@
           }
         );
 
+        # main (always-on deps) + prod (gunicorn, psycopg2) - what compotes
+        # actually needs to run, as opposed to lint/test tools. This is the
+        # prod-appropriate build: examples/traefik/ runs it via gunicorn,
+        # not manage.py runserver (which DEBUG=True's dev loop uses).
+        prodApp = mkPoetryApplication (
+          commonArgs
+          // {
+            groups = [
+              "main"
+              "prod"
+            ];
+            # Skip poetry2nix's check phase: it pulls in dev-group tools
+            # (e.g. ruff) to run project tests as part of the Nix build, but
+            # compotes' tests already run via its own CI/manage.py test, not
+            # via Nix, and nixpkgs doesn't have a pinned build hash for our
+            # exact ruff version (a Rust tool, built from source otherwise).
+            checkGroups = [ ];
+            doCheck = false;
+          }
+        );
+
         # `nix run` is the idiomatic way to "spawn a program" from a flake -
         # `nix develop -c ...` is for entering an interactive shell, not for
         # this. Wraps process-compose with $COMPOTES_SRC pre-set and this
@@ -131,24 +152,7 @@
         };
       in
       {
-        packages.default = mkPoetryApplication (
-          commonArgs
-          // {
-            # main (always-on deps) + prod (gunicorn, psycopg2) - what's
-            # actually needed to run compotes, as opposed to lint/test tools.
-            groups = [
-              "main"
-              "prod"
-            ];
-            # Skip poetry2nix's check phase: it pulls in dev-group tools
-            # (e.g. ruff) to run project tests as part of the Nix build, but
-            # compotes' tests already run via its own CI/manage.py test, not
-            # via Nix, and nixpkgs doesn't have a pinned build hash for our
-            # exact ruff version (a Rust tool, built from source otherwise).
-            checkGroups = [ ];
-            doCheck = false;
-          }
-        );
+        packages.default = prodApp;
 
         apps.default = {
           type = "app";
@@ -165,6 +169,19 @@
           # checkout - by design, compotes carries no Nix files of its own).
           # process-compose.yaml's commands cd there and redirect the sqlite
           # DB to a writable /tmp path.
+          shellHook = ''
+            export COMPOTES_SRC=${compotes-src}
+          '';
+        };
+
+        # gunicorn/psycopg2, no dev tools - what examples/traefik/ actually
+        # runs (a real prod-style WSGI server, not manage.py runserver).
+        devShells.prod = pkgs.mkShell {
+          packages = [
+            prodApp.dependencyEnv
+            pkgs.process-compose
+            pkgs.traefik
+          ];
           shellHook = ''
             export COMPOTES_SRC=${compotes-src}
           '';

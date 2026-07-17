@@ -107,6 +107,11 @@ CSS/JS will silently 404. Two ready-made places to run from:
 - [`examples/`](examples) — no local checkout, no local flake even: shows
   the same recipe pointed at `github:MaximilienNaveau/compotes-extras`
   directly, for deploying this somewhere else entirely.
+- [`examples/traefik/`](examples/traefik) — a real prod-style deployment
+  with no Docker at all: gunicorn (via `devShells.prod`, not
+  `manage.py runserver`) fronted by Traefik, for a prod environment where
+  Nix and Traefik already exist — including how to plug into a Traefik
+  that's *already running elsewhere*, not just a local demo.
 
 (If you're editing `process-compose.yaml` itself: every `$` in its commands
 is doubled (`$$`) on purpose — `process-compose` does its own

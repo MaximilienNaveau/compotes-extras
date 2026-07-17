@@ -1,0 +1,12 @@
+# Traefik static config. Not run through process-compose's own $-mangling
+# (see process-compose.yaml) - Traefik reads this file itself, no escaping
+# needed here.
+
+entryPoints:
+  web:
+    address: ":8090"
+
+providers:
+  file:
+    filename: ./dynamic.yml
+    watch: true
