@@ -8,7 +8,7 @@ config (`../dynamic.yml`), instead of the Docker-provider labels
 
 Symmetric with [`../dev/`](../dev) — same idea, different recipe
 (`process-compose.prod.yaml` instead of `process-compose.yaml`, gunicorn
-instead of `manage.py runserver`), selected by `nix run .#prod` instead of
+instead of the dev recipe's `runserver`), selected by `nix run .#prod` instead of
 `nix run .#dev`.
 
 ## Files (at the repo root, not duplicated per deployment directory)
@@ -61,11 +61,11 @@ No labels, no Docker socket, no `docker-compose.yml` — just a file.
 
 ## Known gap
 
-Gunicorn never serves `/static` or `/media` itself, unlike
-`manage.py runserver` under `DEBUG=True` (what `nix run .#dev` uses
-instead). This doesn't solve that (no nginx, no whitenoise) — CSS/JS will
-404 until something does. See the root [`.env.example`](../.env.example)'s
-note on `DEBUG` for the full explanation.
+Gunicorn never serves `/static` or `/media` itself, unlike `nix run .#dev`'s
+`runserver` under `DEBUG=True`. This doesn't solve that (no nginx, no
+whitenoise) — CSS/JS will 404 until something does. See the root
+[`.env.example`](../.env.example)'s note on `DEBUG` for the full
+explanation.
 
 ## Config
 

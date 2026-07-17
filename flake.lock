@@ -1,22 +1,5 @@
 {
   "nodes": {
-    "compotes-src": {
-      "flake": false,
-      "locked": {
-        "lastModified": 1784135039,
-        "narHash": "sha256-+t9K41xVY4khuv5rHN/j+dGbd0Du2+g23PVOrjsQsQ4=",
-        "owner": "MaximilienNaveau",
-        "repo": "compotes",
-        "rev": "d24ee6c5835ff6633272a9c6f25dc2d92c8a363f",
-        "type": "github"
-      },
-      "original": {
-        "owner": "MaximilienNaveau",
-        "ref": "extras-base",
-        "repo": "compotes",
-        "type": "github"
-      }
-    },
     "flake-utils": {
       "inputs": {
         "systems": "systems"
@@ -116,7 +99,6 @@
     },
     "root": {
       "inputs": {
-        "compotes-src": "compotes-src",
         "flake-utils": "flake-utils",
         "nixpkgs": "nixpkgs",
         "poetry2nix": "poetry2nix"

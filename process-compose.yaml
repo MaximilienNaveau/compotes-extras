@@ -1,11 +1,11 @@
 version: "0.5"
 
-# Local dev / lightweight deployment instance for the full stack (compotes,
-# fetched via the compotes-src flake input + compotes-rest-api). Uses
-# settings.py's sqlite backend by default, redirected to a writable path
-# since compotes-src is a read-only /nix/store path - compotes itself
-# carries no Nix files. Requires `nix develop` or `nix run` (both set
-# $COMPOTES_SRC).
+# Local dev instance for the full stack (compotes + compotes_rest_api,
+# assembled by packages/rest_api/pyproject.toml - see flake.nix). Uses
+# settings.py's sqlite backend by default. No manage.py/$COMPOTES_SRC
+# needed: compotes is just an installed Python package here, so `python -m
+# django` (with --settings pointed at the compotes_extras_site module that
+# wires the REST API in) does everything manage.py would.
 #
 # Parametrized via .env (loaded automatically from the CWD) or the shell
 # environment - see .env.example for the full list. Anything settings.py
@@ -16,7 +16,7 @@ version: "0.5"
 # setup, not to compotes. CHATONS_ROOT_DIR matches compotes' own
 # docker-compose.yml, which roots every persistent volume under
 # ${CHATONS_ROOT_DIR:-/srv/chatons}/compotes/... - same variable here, so
-# examples/ can point it at /srv/chatons and match production exactly, but
+# prod/ can point it at /srv/chatons and match production exactly, but
 # defaulting to /tmp instead of /srv/chatons since a normal user can't
 # write to /srv without root.
 #
@@ -35,16 +35,16 @@ processes:
       set -eu
       data_dir="$${CHATONS_ROOT_DIR:-/tmp}/compotes/$${APP_NAME:-dev}"
       mkdir -p "$$data_dir"
-      cd "$$COMPOTES_SRC"
-      DB="$${DB:-$$data_dir/db.sqlite3}" python manage.py migrate
+      DB="$${DB:-$$data_dir/db.sqlite3}" \
+      python -m django migrate --settings=compotes_extras_site.settings
     availability:
       restart: "no"
 
   runserver:
     command: |
       data_dir="$${CHATONS_ROOT_DIR:-/tmp}/compotes/$${APP_NAME:-dev}"
-      cd "$$COMPOTES_SRC"
-      DB="$${DB:-$$data_dir/db.sqlite3}" python manage.py runserver "0.0.0.0:$${PORT:-8000}"
+      DB="$${DB:-$$data_dir/db.sqlite3}" \
+      python -m django runserver "0.0.0.0:$${PORT:-8000}" --settings=compotes_extras_site.settings
     depends_on:
       migrate:
         condition: process_completed_successfully

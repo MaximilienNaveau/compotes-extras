@@ -9,11 +9,15 @@ version: "0.5"
 #   nix run .#prod -- down   # stop
 #
 # (symmetric with the dev recipe, process-compose.yaml / `nix run .#dev` -
-# see the root README's "Nix packaging" section.) apps.prod sets
-# $COMPOTES_SRC (compotes' fetched source) and $FLAKE_SRC (this repo's own
-# source - where traefik.yml/dynamic.yml live) and puts
+# see the root README's "Nix packaging" section.) apps.prod sets $FLAKE_SRC
+# (this repo's own source - where traefik.yml/dynamic.yml live) and puts
 # gunicorn/traefik/process-compose on PATH itself, same as apps.dev does
-# for the dev recipe - no `nix develop` needed.
+# for the dev recipe - no `nix develop` needed. No $COMPOTES_SRC/manage.py
+# either: compotes is just an installed Python package here (see
+# flake.nix), so gunicorn imports `compotes.wsgi:application` directly,
+# with DJANGO_SETTINGS_MODULE pointed at the compotes_extras_site module
+# that wires the REST API in (compotes.wsgi's own
+# `os.environ.setdefault(...)` only takes effect if this isn't already set).
 #
 # If your real deployment already has its own Traefik running elsewhere
 # (the common case - "nix and a traefik environment exists" already,
@@ -28,9 +32,9 @@ version: "0.5"
 # before bash ever sees them).
 #
 # KNOWN GAP, not solved here: gunicorn never serves /static or /media
-# itself (unlike manage.py runserver under DEBUG=True) - see
-# .env.example's note on DEBUG for why this setup doesn't try to and what
-# to add (nginx, whitenoise, ...) before relying on this for real.
+# itself - see .env.example's note on DEBUG for why this setup doesn't try
+# to and what to add (nginx, whitenoise, ...) before relying on this for
+# real.
 
 processes:
   migrate:
@@ -38,19 +42,19 @@ processes:
       set -eu
       data_dir="$${CHATONS_ROOT_DIR:-/tmp}/compotes/$${APP_NAME:-prod}"
       mkdir -p "$$data_dir"
-      cd "$$COMPOTES_SRC"
-      DB="$${DB:-$$data_dir/db.sqlite3}" python manage.py migrate
+      DB="$${DB:-$$data_dir/db.sqlite3}" \
+      python -m django migrate --settings=compotes_extras_site.settings
     availability:
       restart: "no"
 
   gunicorn:
     command: |
-      cd "$$COMPOTES_SRC"
       data_dir="$${CHATONS_ROOT_DIR:-/tmp}/compotes/$${APP_NAME:-prod}"
       # Bound to 127.0.0.1, not 0.0.0.0: the whole point of this example is
       # that Traefik is the only public entrypoint, matching how `app` in
       # docker-compose.yml has no host port mapping of its own either.
       DB="$${DB:-$$data_dir/db.sqlite3}" \
+      DJANGO_SETTINGS_MODULE=compotes_extras_site.settings \
       gunicorn compotes.wsgi:application --bind "127.0.0.1:$${APP_PORT:-8000}"
     depends_on:
       migrate:

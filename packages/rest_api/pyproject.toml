@@ -4,14 +4,20 @@ requires = ["poetry-core>=1.0.0"]
 
 [tool.poetry]
 authors = ["Maximilien Naveau <maximilien.naveau@gmail.com>"]
-description = "Django REST Framework API app for compotes"
+description = "Django REST Framework API app for compotes, plus the full-stack wiring and prod server deps to run it"
 license = "BSD-2-Clause"
 name = "compotes-rest-api"
-packages = [{include = "compotes_rest_api"}]
+packages = [
+    {include = "compotes_rest_api"},
+    {include = "compotes_extras_site"},
+]
 version = "0.1.0"
 
 [tool.poetry.dependencies]
-compotes = {git = "https://github.com/MaximilienNaveau/compotes.git", rev = "8da4d40087aa66653f71a50c360930ca213b8b0f"}
+# compotes depends on nothing here - this points the other way, at
+# compotes' extras-base branch (events + the packaging fix, no REST of
+# its own). Bump this rev after any change to extras-base.
+compotes = {git = "https://github.com/MaximilienNaveau/compotes.git", rev = "9bacb7e9cc91b00ddf89dc24e15ecf6b71bbff10"}
 django = ">=4.2,<5.0"
 django-filter = ">=24.3,<26.0"
 djangorestframework = ">=3.15,<4.0"
@@ -23,6 +29,19 @@ optional = true
 [tool.poetry.group.dev.dependencies]
 coverage = "^7.13.5"
 ruff = "^0.15.9"
+
+[tool.poetry.group.prod]
+optional = true
+
+[tool.poetry.group.prod.dependencies]
+# Prod server deps, bundled here rather than in a separate package: this
+# is the one place the full stack (compotes + compotes_rest_api) is
+# assembled at all, so it's also the natural place to add what running it
+# for real needs. Optional (like compotes' own prod group) so CI's plain
+# `poetry install --with dev` for this package's own tests doesn't need
+# libpq available to build psycopg2.
+gunicorn = ">=23,<27"
+psycopg2 = "^2.9.10"
 
 [tool.tomlsort]
 all = true
