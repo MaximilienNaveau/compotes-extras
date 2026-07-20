@@ -4,3 +4,9 @@ __pycache__/
 db.sqlite3
 .pytest_cache/
 .ruff_cache/
+
+# Real .env files carry secrets (SECRET_KEY, POSTGRES_PASSWORD) - only the
+# checked-in dev/.env is meant to be committed (no secrets, just APP_NAME/
+# PORT for local dev).
+/prod/.env
+/docker/.env

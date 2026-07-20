@@ -188,6 +188,21 @@ no-op unless the update actually added new migrations.
 To start over with a blank DB instead, delete it first (`/tmp/compotes/dev`
 by default).
 
+## Docker Compose, no Nix
+
+For a server that doesn't have Nix yet: [`docker/`](docker) is a straight
+copy of compotes' own `docker-compose.yml`/`Dockerfile` (Postgres + nginx +
+Traefik via Docker labels), pointed at this repo's app instead - same
+shape, same host paths, same container names, just built from
+`packages/rest_api` with `DJANGO_SETTINGS_MODULE=compotes_extras_site.settings`
+baked in. It's a drop-in replacement for compotes' own `docker-compose.yml`,
+not something meant to run alongside it. See [`docker/README.md`](docker/README.md)
+for what's different and how to deploy it.
+
+`nix run .#prod` above is still the intended long-term path once Nix is
+available - keep both in mind if `compotes_extras_site` or its
+dependencies change, so the Docker copy doesn't silently bit-rot.
+
 ## Provenance
 
 `packages/rest_api/compotes_rest_api` started life as commits `05bced6`

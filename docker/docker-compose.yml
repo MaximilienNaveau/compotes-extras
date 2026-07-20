@@ -1,0 +1,58 @@
+# A straight copy of compotes' own docker-compose.yml, pointed at this
+# repo's app instead: build context is the repo root (not this directory),
+# and DJANGO_SETTINGS_MODULE (baked into ./Dockerfile) is
+# compotes_extras_site.settings instead of compotes.settings, so this one
+# also serves /api/. Same postgres + nginx + Traefik-via-Docker-labels
+# shape otherwise - see ../docs/README.md and ./README.md for what's
+# actually different.
+#
+# `name:` pins the Compose project (and so container names, e.g.
+# compotes-app-1) to "compotes" regardless of which directory this file is
+# run from - compotes' own docker-compose.yml doesn't need this since its
+# repo checkout is itself a directory called "compotes" (Compose's
+# default), but this one lives in a "docker" subdirectory. Keeping the
+# same project name means ../conf/compotes.service's `docker exec
+# compotes-app-1 ...` still works unchanged, and this is a drop-in
+# replacement for compotes' own docker-compose.yml, not something meant to
+# run alongside it (same Host() rule, same /srv/compotes/* paths).
+name: compotes
+
+services:
+  postgres:
+    image: postgres:14-alpine
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - "${CHATONS_ROOT_DIR:-/srv/chatons}/compotes/sql:/var/lib/postgresql/data"
+  app:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    restart: unless-stopped
+    volumes:
+      - "${CHATONS_ROOT_DIR:-/srv/chatons}/compotes/srv:/srv"
+    env_file:
+      - .env
+    environment:
+      - DB=postgres
+    networks:
+      - web
+      - default
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.compotes-app.rule: "Host(`compotes.${DOMAIN_NAME:-localhost}`)"
+  nginx:
+    image: nim65s/ndh:nginx
+    restart: unless-stopped
+    volumes:
+      - "${CHATONS_ROOT_DIR:-/srv/chatons}/compotes/srv/compotes:/srv:ro"
+    networks:
+      - web
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.compotes-ngx.rule: "Host(`compotes.${DOMAIN_NAME:-localhost}`) && PathPrefix(`/static`, `/media`)"
+
+networks:
+  web:
+    external: true
